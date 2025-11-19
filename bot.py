@@ -10,14 +10,17 @@ from telegram.ext import (
 )
 
 # --- Configuration & Environment ---
-# NOTE: The token is read from the environment variables set on Render.
+# NOTE: TOKEN is read from the environment variable set on Render.
 MINI_APP_URL = "https://qrcrafter-bot.vercel.app"
+
+# Render URL provided by the user (Used for setting the webhook)
+RENDER_SERVICE_URL = "https://qr-crafter-bot.onrender.com" 
 
 # Placeholders (Replace these with your actual links when ready)
 SUPPORT_URL = "https://t.me/QrCrafterbot?start=support" 
 BUY_ME_A_COFFEE_URL = "https://your.actual.support/link" 
 
-# Set up logging (Good practice for debugging on Render)
+# Set up logging (Essential for debugging on Render)
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -75,7 +78,7 @@ async def show_features(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = InlineKeyboardMarkup([[
         InlineKeyboardButton(text="🚀 Launch QR Crafter Mini App", web_app=WebAppInfo(url=MINI_APP_URL))
     ]])
-    await (update.callback_query or update.message).reply_text( # Use query.edit_message_text for better UX
+    await (update.callback_query or update.message).reply_text(
         features_text,
         reply_markup=keyboard,
         parse_mode="Markdown"
@@ -100,13 +103,14 @@ async def show_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer() # Acknowledge the button press
+    await query.answer() 
     
-    # We edit the message instead of sending a new one for cleaner UX
+    # We use edit_message_text for cleaner UX, but reply_text is safer for message/query objects
     if query.data == 'cmd_features':
-        await show_features(query, context)
+        # Pass the original message object to reply_text
+        await show_features(update, context) 
     elif query.data == 'cmd_guide':
-        await show_guide(query, context)
+        await show_guide(update, context)
 
 
 # --- Main Application Runner (Webhook) ---
@@ -117,14 +121,16 @@ def main() -> None:
     
     # Render sets these automatically when deploying a Web Service
     PORT = int(os.environ.get("PORT", "8080")) 
-    WEBHOOK_URL = os.environ.get("RENDER_EXTERNAL_URL") 
     
+    # We use the explicitly provided URL for setting the webhook
+    WEBHOOK_BASE_URL = os.environ.get("RENDER_EXTERNAL_URL", RENDER_SERVICE_URL)
+
     if not TOKEN:
         logger.error("FATAL ERROR: BOT_TOKEN is not set.")
         return
 
-    # 2. Build the Application
-    application = Application.builder().token(TOKEN).build()
+    # 2. Build the Application (FIXED: Enable job_queue explicitly)
+    application = Application.builder().token(TOKEN).job_queue(True).build()
 
     # 3. Register Handlers
     application.add_handler(CommandHandler("start", menu))
@@ -134,21 +140,24 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(button_callback))
     
     # 4. Set Commands and Run Webhook
-    if WEBHOOK_URL:
+    if WEBHOOK_BASE_URL:
         # Set commands once on startup
         application.job_queue.run_once(lambda context: set_bot_commands(application), 0)
+        
+        # The webhook path includes the token for security
+        WEBHOOK_PATH = '/' + TOKEN 
         
         # Start the web server (Listens on the port Render requires)
         application.run_webhook(
             listen="0.0.0.0",
             port=PORT,
-            url_path=TOKEN, # Use token as the secret path for Telegram updates
-            webhook_url=WEBHOOK_URL + TOKEN
+            url_path=WEBHOOK_PATH,
+            webhook_url=WEBHOOK_BASE_URL + WEBHOOK_PATH
         )
-        logger.info(f"✅ Bot started in Webhook mode on URL: {WEBHOOK_URL + TOKEN}")
+        logger.info(f"✅ Bot started in Webhook mode on URL: {WEBHOOK_BASE_URL + WEBHOOK_PATH}")
     else:
-        # Fallback to polling for local testing (if RENDER_EXTERNAL_URL is missing)
-        logger.warning("⚠️ RENDER_EXTERNAL_URL not set. Running in Polling mode for local testing.")
+        # Fallback to polling for local testing 
+        logger.warning("⚠️ WEBHOOK_BASE_URL not set. Running in Polling mode for local testing.")
         application.run_polling(poll_interval=3.0) 
 
 if __name__ == "__main__":
