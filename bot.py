@@ -6,7 +6,8 @@ from telegram.ext import (
     CommandHandler, 
     ContextTypes, 
     CallbackQueryHandler,
-    Application
+    Application,
+    JobQueue # <-- CRITICAL: Import JobQueue class
 )
 
 # --- Configuration & Environment ---
@@ -116,20 +117,18 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main() -> None:
     # 1. Get environment variables
     TOKEN = os.environ.get("BOT_TOKEN")
-    
-    # Render sets these automatically when deploying a Web Service
     PORT = int(os.environ.get("PORT", "8080")) 
-    
-    # Render provides its external URL via RENDER_EXTERNAL_URL
     WEBHOOK_BASE_URL = os.environ.get("RENDER_EXTERNAL_URL", RENDER_SERVICE_URL)
 
     if not TOKEN:
         logger.error("FATAL ERROR: BOT_TOKEN is not set.")
         return
 
-    # 2. Build the Application (FIXED: Call job_queue() without a parameter)
-    # This enables JobQueue since the dependencies are now in requirements.txt
-    application = Application.builder().token(TOKEN).job_queue().build()
+    # 2a. Instantiate the JobQueue (CRITICAL FIX for AttributeError)
+    job_queue = JobQueue()
+
+    # 2b. Build the Application (Pass the JobQueue instance)
+    application = Application.builder().token(TOKEN).job_queue(job_queue).build()
 
     # 3. Register Handlers
     application.add_handler(CommandHandler("start", menu))
