@@ -10,13 +10,13 @@ from telegram.ext import (
 )
 
 # --- Configuration & Environment ---
-# NOTE: TOKEN is read from the environment variable set on Render.
+# Your Mini App URL
 MINI_APP_URL = "https://qrcrafter-bot.vercel.app"
 
-# Render URL provided by the user (Used for setting the webhook)
+# Your Render Service URL (Used for setting the webhook path)
 RENDER_SERVICE_URL = "https://qr-crafter-bot.onrender.com" 
 
-# Placeholders (Replace these with your actual links when ready)
+# Placeholders (Update these when ready)
 SUPPORT_URL = "https://t.me/QrCrafterbot?start=support" 
 BUY_ME_A_COFFEE_URL = "https://your.actual.support/link" 
 
@@ -33,7 +33,7 @@ COMMANDS = [
     BotCommand("guide", "📚 Step-by-step usage guide"),
 ]
 
-# --- Handlers (Your existing command logic) ---
+# --- Handlers ---
 
 async def set_bot_commands(application):
     """Sets the official list of commands for the bot menu."""
@@ -105,9 +105,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer() 
     
-    # We use edit_message_text for cleaner UX, but reply_text is safer for message/query objects
     if query.data == 'cmd_features':
-        # Pass the original message object to reply_text
         await show_features(update, context) 
     elif query.data == 'cmd_guide':
         await show_guide(update, context)
@@ -122,15 +120,16 @@ def main() -> None:
     # Render sets these automatically when deploying a Web Service
     PORT = int(os.environ.get("PORT", "8080")) 
     
-    # We use the explicitly provided URL for setting the webhook
+    # Render provides its external URL via RENDER_EXTERNAL_URL
     WEBHOOK_BASE_URL = os.environ.get("RENDER_EXTERNAL_URL", RENDER_SERVICE_URL)
 
     if not TOKEN:
         logger.error("FATAL ERROR: BOT_TOKEN is not set.")
         return
 
-    # 2. Build the Application (FIXED: Enable job_queue explicitly)
-    application = Application.builder().token(TOKEN).job_queue(True).build()
+    # 2. Build the Application (FIXED: Call job_queue() without a parameter)
+    # This enables JobQueue since the dependencies are now in requirements.txt
+    application = Application.builder().token(TOKEN).job_queue().build()
 
     # 3. Register Handlers
     application.add_handler(CommandHandler("start", menu))
